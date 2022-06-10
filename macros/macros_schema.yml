@@ -1,0 +1,19 @@
+version: 2
+
+macros:
+  - name: cron_to_timestamps
+    description: >
+      A macro to generate timestamps from a table of cron expressions. 
+    arguments:
+      - name: cte_name
+        type: string
+        description: The name of a CTE containing unique cron expressions.
+      - name: cron_column_name
+        type: string
+        description: The name of the column containing cron experssions within the CTE.
+      - name: start_date
+        type: string
+        description: A string that will produce a SQL syntax DATE(<start_date>) as the starting date for matching timestamps 
+      - name: days_forward
+        type: integer
+        description: The number of days from ward from the start date on which to generate matching timestamps.
