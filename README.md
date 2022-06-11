@@ -6,12 +6,12 @@ This macro fans out a table of one-or-more cron expression by their matching tim
 
 ## Usage 
 
-This macro is used as the sole entry in a CTE, and it interacts with another CTE that you have already defined, and that contains cron expressions.
-As parameters, the model takes the name of the preceding CTE, and the name of the column containing cron expressions. In this example, `some_cron_cte`
-and `cron_code` are the values passed to the macro. It will reference `some_cron_cte.cron_code` in its compiled SQL.
+This macro is used as the sole entry in a CTE. It interacts with a preceding CTE containing cron expressions in one column.
+In this example, `some_cron_cte` and `cron_code` are the name of the CTE, and it's cron expression column.
+The macro will contain a reference to `some_cron_cte.cron_code` in its compiled SQL.
 
-The macro also takes a date-like string for the start date (it runs `date(<start_date_string>)`) and a number of days forward in which
-to generate matching timestamps. Cron is a pattern-matching expression, and requires this start and end to output finite matches.
+The macro also takes a date-like string for the start date (such that `date(<start_date_string>)` works) and a number of days forward.
+These two parameters form a timeframe within which to generate matching timestamps.
 
 ## Example Usage
   ```
@@ -40,13 +40,14 @@ to generate matching timestamps. Cron is a pattern-matching expression, and requ
   where cron_timestamps.trigger_at_utc > current_timestamp
   ```
 
-## Additiona Considerations
+## Additional Considerations
 
-Cron, like SQL, comes in many flavors. The time-parts `day-of-month` and `day-of-week` overlap in their consideration of days. Various implementations of
-cron treat these two sets of matches differently. The classic implementation covered in crontab.guru](https://crontab.guru/) will `intersect` the matched days 
-from each part, but only if one or both contain a `*`, and only if the `*` is in the first position. See the [cron bug](https://crontab.guru/cron-bug.html) article
+Cron, like SQL, comes in many flavors. The most finnicky part of this macro is the "day matching mode".
+The time-parts `day-of-month` and `day-of-week` overlap in their consideration of days. Various implementations of cron treat these two 
+sets of matches differently. The classic implementation, covered in crontab.guru](https://crontab.guru/), will `intersect` the matched days 
+from each part if one or both contain a `*`, and only if the `*` is in the first position. See the [cron bug](https://crontab.guru/cron-bug.html) article
 for deeper reference. If neither day part starts with `*`, the results are combined as a `union`, meaning that a matched day need only match one of the day part expressions.
 
-The first CTE of the macro determines the "day match mode", and an optional parameter `day_match_mode` can be set to `vixie` (default), `contains` (check beyond first position),
-`intersect` or `union` to force a parcticular strategy.
+The first CTE of the macro determines the "day match mode", and an optional parameter `day_match_mode` can be set to `vixie` (default), 
+`contains` (to check for `*` beyond the first position), or `intersect` or `union` to force a parcticular strategy across all expressions.
 
