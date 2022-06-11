@@ -53,9 +53,8 @@
     select distinct 
       {{ cron_column_name }} as cron
 
-      {% if day_match_mode == 'vixie' %}
+      {% if day_match_mode == 'vixie' -%}
       
-      -- only checking first position is defacto standard per https://crontab.guru/cron-bug.html
       , case
           when not left(split_part({{ cron_column_name }}, ' ', 3), 1) = '*'
           and not left(split_part({{ cron_column_name }}, ' ', 5), 1) = '*'
@@ -63,7 +62,7 @@
           else 'intersect'
         end as day_match_mode
       
-      {% elif day_match_mode == 'contains' %}
+      {%- elif day_match_mode == 'contains' -%}
 
       , case
           when not left(split_part({{ cron_column_name }}, ' ', 3), 1) like '%*%'
@@ -72,17 +71,23 @@
           else 'intersect'
         end as day_match_mode
 
-      {% elif day_match_mode in ('union', 'intersect') %}
+      {%- elif day_match_mode in ('union', 'intersect') -%}
 
       , '{{ day_match_mode }}' as day_match_mode
 
-      {% endif %}
+      {%- endif %}
 
     from {{ cte_name }}
   )
 
   , dates_in_range as (
+    
+    {% if '0' in start_date  -%} 
+    select dateadd('day', row_number() over (order by 1) - 1, date('{{ start_date }}')) as date
+    {%- else -%}
     select dateadd('day', row_number() over (order by 1) - 1, date({{ start_date }})) as date
+    {%- endif %}
+
     from table (generator(rowcount => {{ days_forward }} ))
   )
 
@@ -270,7 +275,11 @@
     and dayofweek(try_to_date(concat(years.value_text, '-', cron_part_month.value_text, '-', month_days.value_text))) = cron_part_day_of_week.value
     and cron_part_day_of_week.cron_part = 'day_of_week'
 
+  {% if '0' in start_date  -%} 
+  where trigger_at_utc between date('{{ start_date }}') and dateadd('day', {{ days_forward }}, date('{{ start_date }}'))
+  {%- else -%}
   where trigger_at_utc between date({{ start_date }}) and dateadd('day', {{ days_forward }}, date({{ start_date }}))
+  {%- endif %}
     and (
       (crons.day_match_mode = 'union' 
       and (cron_part_day_of_month.value is not null 

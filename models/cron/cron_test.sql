@@ -9,7 +9,7 @@ with crons as (
 )
 
 , cron_timestamps as (
-    {{ cron_to_timestamps('crons', 'cron', 'current_date', days_forward=60, day_match_mode='vixie') }}
+    {{ cron_to_timestamps('crons', 'cron', 'current_date', days_forward=60, day_match_mode='contains') }}
 )
 
 select *
