@@ -8,26 +8,28 @@
 %}
 
 {#-
-  A macro to generate timestamps from cron expression strings forward from some start date. There are multiple flavors of cron.
-  This macro is based on the information provided at crontab.guru.
-  Timestamps are generated additively from matched time-parts. This is a relatively efficient approach, but result
-  sets can still be large. Consider using the `start_date` and `days_forward` parameters to limit results.
-  This macro is designed to be called on its own in a CTE (see Example Call below). The CTE will contain two columns: 
-  cron, trigger_at_utc. And results will be distinct.
+  A macro to generate timestamps from cron expression strings. Timestamps are limited by a passed 
+  `start_date` and `days_forward` integer. 
+  There are multiple flavors of cron. This macro is based on the information provided at crontab.guru.
+  Timestamps are generated additively from matched time-parts, rather than reductively from all possible matches. 
+  This is a relatively efficient approach, but result sets can still be large. Use the `start_date` 
+  and `days_forward` parameters to limit results accordingly.
+  The output of this macro populates a CTE with SQL resulting in two columns: `cron` and `trigger_at_utc`. 
+  Results are distinct.
 
-  :param cte_name: The name of a CTE containing cron expressions, defined earlier in the model.  
-  :param cron_column_name: The name of the column in `cte_name` that contains cron expressions.
-  :param start_date: The start date from which to produce timestamps. A string such that `date({{ start_date }})` will work.
-  :param days_forward: The number of days forward from the `start_date` within which to generate timestamps.
-  :param Advanced. Default 'vixie'. Alternatively `contains`, `union` or `intersect`. This parameter controls how day 
-    matching is done. In some implementations, the presence of an asterisk in either the `day_of_month` or `day_of_week` positions
-    determines whether day matches are unioned or intersected. Only the first character of the position is checked, 
+  :param cte_name: The name of a preceding CTE containing cron expressions.
+  :param cron_column_name: The name of the column in `cte_name` that contains the cron expressions.
+  :param start_date: The starting date from which to produce timestamps. Invoked with: `date({{ start_date }})`.
+  :param days_forward: The number of days forward from the `start_date` within which to generate matching timestamps.
+  :param day_match_mode: Default 'vixie'. Alternatively `contains`, `union` or `intersect`. This parameter controls how day 
+    matching is done. In some implementations of cron, the presence of an asterisk in either the `day_of_month` or `day_of_week` 
+    positions determines whether day matches are unioned or intersected. In `vixie` mode, only the first character is checked, 
     see [this write up](https://crontab.guru/cron-bug.html) for details. Passing `contains` will check all positions, 
-    while passing `union` or `intersect` will hard-code the behavior. Some modern implementations use `intersect` by default.
+    while passing `union` or `intersect` will hard-code the behavior, as some modern implementations use `intersect` by default.
 
-  :return: A SQL select statement of ~200 lines that culminates in a two column distinct selection: cron, trigger_at_utc.
+  :return: A SQL select statement of ~200 lines that culminates in a two column distinct selection: `cron, trigger_at_utc`.
 
-  ##Example call##:
+  ## Example call ##:
   ```
   with some_cron_cte as (
     select id, cron_code, other_column from {{ ref('some_other_model') }}
