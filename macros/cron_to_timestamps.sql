@@ -211,7 +211,7 @@
               else cron_part_comma_subentry_range_start
             end
         ) as cron_part_comma_subentry_range_end
-    from crons
+    from cron_day_match_mode as crons
     inner join numbers as space_number
       on space_number.num between 1 and 5
     inner join cron_part_defaults
