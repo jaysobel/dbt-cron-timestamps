@@ -3,6 +3,7 @@
      , cron_column_name='cron'
      , start_at_column_name='start_date'
      , end_at_column_name='end_date'
+     , max_date_range='1095'
      , day_match_mode='vixie'
    ) 
 %}
@@ -17,8 +18,9 @@
 
   :param cte_name: The name of a preceding CTE containing cron expressions.
   :param cron_column_name: The name of the column in `cte_name` that contains the cron expressions.
-  :param start_at_column_name: The name of the column in `cte_name` that contains the generation range start.
-  :param start_at_column_name: The name of the column in `cte_name` that contains the generation range end.
+  :param start_at_column_name: The name of the column in `cte_name` that contains the generation range start as a timestamp or date.
+  :param start_at_column_name: The name of the column in `cte_name` that contains the generation range end as a timestamp or date.
+  :param max_date_range: The maximum number of days between an entry's start and end columns. Default is 1095 (365*3).
   :param day_match_mode: Default 'vixie'. Alternatively `contains`, `union` or `intersect`. This parameter controls how day 
     matching is performed. The day_of_month and day_of_week parts are either unioned or intersected. In some implementations
     of cron, this is based on the presence of an * in the first position of each entry (vixie). Others expand this 'first entry'
@@ -95,7 +97,7 @@
 
   , numbers as (
     select row_number() over (order by 1) - 1 as num
-    from table (generator(rowcount => (select greatest(days_forward, 60) from max_days_forward )))
+    from table (generator(rowcount => number({{max_date_range}}) )) -- the maximum start/end range allowable
   )
 
   -- fan each cron by it's start-end date range
@@ -248,7 +250,7 @@
       on cpcs.cron_part = cpv.cron_part
       and cpv.value between cpcs.cron_part_comma_subentry_range_start and cpcs.cron_part_comma_subentry_range_end
       and mod(cpv.value - cpcs.cron_part_comma_subentry_range_start, cpcs.cron_part_comma_subentry_step_value) = 0
-    group by 1,2,3,4,5
+    group by 1,2,3,4,5,6
   )
 
   -- Join cron day ranges with matched months, and both day types, dependent on day_match_mode
