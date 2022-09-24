@@ -1,4 +1,4 @@
-{% macro cron_to_timestamps(
+{% macro cron_start_end_to_timestamps(
      cte_name='crons'
      , cron_column_name='cron'
      , start_at_column_name='start_date'
@@ -19,21 +19,16 @@
   :param cron_column_name: The name of the column in `cte_name` that contains the cron expressions.
   :param start_at_column_name: The name of the column in `cte_name` that contains the generation range start.
   :param start_at_column_name: The name of the column in `cte_name` that contains the generation range end.
-  :param day_match_mode: Default 'vixie'. Alternatively `contains`, `union` or `intersect`. This parameter controls how day 
-    matching is done. In some implementations of cron, the presence of an asterisk in either the `day_of_month` or `day_of_week` 
-    positions determines whether day matches are unioned or intersected. In `vixie` mode, only the first character is checked, 
-    see [this write up](https://crontab.guru/cron-bug.html) for details. Passing `contains` will check all positions, 
-    while passing `union` or `intersect` will hard-code the behavior, as some modern implementations use `intersect` by default.
 
-  :return: A SQL select statement of ~200 lines that culminates in a two column distinct selection: `cron, trigger_at_utc`.
+  :return: A SQL select statement of ~250 lines that culminates in a distinct selection of: `cron, cron_range_sk, trigger_at_utc`.
 
   ## Example call ##:
   ```
   with some_cron_cte as (
-    select id, cron_code, other_column from {{ ref('some_other_model') }}
+    select id, cron_code, created_at, next_created_at, other_column from {{ ref('some_other_model') }}
   )
   , cron_timestamps as (
-    {{ cron_to_timestamps('some_cron_cte', 'cron_code', 'current_date', 60) }}
+    {{ cron_start_end_to_timestamps('some_cron_cte', 'cron_code', 'created_at', 'next_created_at') }}
   )
   select 
     some_cron_cte.cron_code
@@ -41,8 +36,7 @@
   
   from some_cron_cte
   inner join cron_timestamps 
-    on some_cron_cte.cron_code = cron_timestamps.cron
-  where cron_timestamps.trigger_at_utc > current_timestamp
+    on concat(some_cron_cte.cron_code, '-', date(created_at), '-', date(next_created_at)) = cron_timestamps.cron_range_sk
   ```
 -#}
 
@@ -50,9 +44,9 @@
     select distinct 
       {{ cron_column_name }} as cron
       -- In case these are timestamps
-      , {{ start_at_column_name }} as start_raw,
+      , {{ start_at_column_name }} as start_raw
       , date({{ start_at_column_name }}) as start_date
-      , {{ end_at_column_name }} as end_raw,
+      , {{ end_at_column_name }} as end_raw
       , date({{ end_at_column_name }}) as end_date
       , concat(
           {{ cron_column_name }}
@@ -106,11 +100,11 @@
       , crons.cron
       , crons.start_raw
       , crons.end_raw
-      , dateadd('day', crons.start_date, crons.end_date) as date
+      , dateadd('day', numbers.num, crons.start_date) as date
       , crons.day_match_mode
     from cron_day_match_mode as crons
     inner join numbers 
-      on datediff('day', crons.start_date, crons.end_date) + 1 >= numbers.n
+      on datediff('day', crons.start_date, crons.end_date) + 1 >= numbers.num
       and numbers.num between 0 and (select days_forward from max_days_forward)
   )
 
