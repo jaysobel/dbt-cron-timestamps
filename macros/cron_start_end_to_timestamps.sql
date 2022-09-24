@@ -1,8 +1,8 @@
 {% macro cron_start_end_to_timestamps(
-     cte_name='crons'
-     , cron_column_name='cron'
-     , start_at_column_name='start_date'
-     , end_at_column_name='end_date'
+     cte_name
+     , cron_column_name
+     , start_at_column_name
+     , end_at_column_name
      , max_date_range='1095'
      , day_match_mode='vixie'
    ) 
