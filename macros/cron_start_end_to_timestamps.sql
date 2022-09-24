@@ -19,6 +19,11 @@
   :param cron_column_name: The name of the column in `cte_name` that contains the cron expressions.
   :param start_at_column_name: The name of the column in `cte_name` that contains the generation range start.
   :param start_at_column_name: The name of the column in `cte_name` that contains the generation range end.
+  :param day_match_mode: Default 'vixie'. Alternatively `contains`, `union` or `intersect`. This parameter controls how day 
+   matching is done. In some implementations of cron, the presence of an asterisk in either the `day_of_month` or `day_of_week` 
+   positions determines whether day matches are unioned or intersected. In `vixie` mode, only the first character is checked, 
+   see [this write up](https://crontab.guru/cron-bug.html) for details. Passing `contains` will check all positions, 
+   while passing `union` or `intersect` will hard-code the behavior, as some modern implementations use `intersect` by default.
 
   :return: A SQL select statement of ~250 lines that culminates in a distinct selection of: `cron, cron_range_sk, trigger_at_utc`.
 
