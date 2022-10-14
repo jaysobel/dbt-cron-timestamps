@@ -252,8 +252,8 @@
     inner join part_defaults
       on space_number.num = part_defaults.part_number
     inner join numbers as comma_numbers
-      on regexp_count(split_part(crons.cron, ' ', space_number.num), ',') + 1 >= comma_numbers.num
-      and comma_numbers.num between 1 and 10 -- maximum comma-separated subentries to split within a part
+      on regexp_count(split_part(crons.cron, ' ', space_number.num), ',') >= comma_numbers.num
+      and comma_numbers.num between 0 and 10 -- maximum comma-separated subentries to split within a part
   )
 
   -- Distinct subentries across crons before matching
