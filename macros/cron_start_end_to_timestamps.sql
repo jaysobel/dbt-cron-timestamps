@@ -27,8 +27,8 @@
   :param start_at_column_name: The name of the column in `cte_name` that contains the generation range start as a timestamp or date.
   :param end_at_column_name: The name of the column in `cte_name` that contains the generation range end as a timestamp or date.
   :param unique_id: The name of the column in `cte_name` that contains a unique identifier.
-  :param max_date_range: The maximum number of days between an entry's start and end columns. Default is 1095 (365*3).
-  :param day_match_mode: Default 'vixie'. Alternatively `contains`, `union` or `intersect`. This parameter controls how day 
+  :param max_date_range: The maximum number of days between an entrys start and end columns. Default is 1095 (365*3).
+  :param day_match_mode: Default vixie. Alternatively `contains`, `union` or `intersect`. This parameter controls how day 
     matching is performed. The day_of_month and day_of_week parts are either unioned or intersected. In some implementations
     of cron, this is based on the presence of an * in the first position of each entry (vixie). Others expand this 'first entry'
     to any position of the entry (contains). See [this write up](https://crontab.guru/cron-bug.html) for details.
