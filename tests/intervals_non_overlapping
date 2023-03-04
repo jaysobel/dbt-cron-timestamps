@@ -1,0 +1,103 @@
+{% test intervals_non_overlapping(model, within_column, start_at_utc, end_at_utc, unique_id, allow_touching_edges, optimization=None) %}
+
+{#  
+  Test Definitions
+  ===========================
+  This test verifies whether rows representing intervals of time with start/end timestamps
+  overlap with one another, within some identifying column partition. For example, user sessions
+  should not have have overlapping start/end timestamps within a given user_id.
+  
+  Overlaps are found by running a self-join on an inequality of the start/end timestamps. This 
+  is a cross-join within the bounds of provided equality conditions, and can perform poorly.  
+  The [optimization] parameter improves performance by first fanning each interval to its spanned
+  dates, and adding this field to as an additional equality condition in the self-join.
+#} 
+
+  {% if optimization == "fan_duration_days" %}
+    {% set fan_numbers = True %}
+  {% else %}
+    {% set fan_numbers = False %}
+  {% endif %}
+
+  {% if fan_numbers %}
+    with intervals_agg as (
+      select max(datediff('day', {{ start_at_utc }}, {{ end_at_utc }})) as max_duration_days
+      from {{ model }}
+    )
+    
+    , generated_series as (
+      {{ dbt_utils.generate_series(upper_bound=100) }}
+    )
+    
+    , dim_numbers as (
+      select generated_number::int - 1 as n
+      from generated_series
+      where n between 0 and (select max_duration_days + 1 from intervals_agg)
+    )
+
+  {% else %}
+    -- Running in non-optimized raw overlap mode. Overlap comparisons are slow!
+    with 
+  {% endif %}
+
+  renamed as (
+    select 
+        model.{{ unique_id }} as unique_id
+      , model.{{ within_column }} as within_column
+      , model.{{ start_at_utc }} as start_at_utc
+      , coalesce({{ end_at_utc }}, current_timestamp) as end_at_utc
+      {% if fan_numbers %}
+      , dateadd('day', numbers.n, model.{{ start_at_utc }}::date) as interval_date
+      {% endif %}
+    
+    from {{ model }} as model
+    {% if fan_numbers %}
+      inner join numbers 
+        on numbers.n between 0 and datediff('day', model.{{ start_at_utc }}, coalesce(model.{{ end_at_utc }}, current_timestamp))
+    {% endif %}
+  )
+
+  select {% if fan_numbers %} distinct {% endif %}
+
+      'overlapping intervals' as error_type
+    , one.within_column::text as key_one
+    , one.start_at_utc as one_start_at_utc
+    , one.end_at_utc as one_end_at_utc
+    , two.within_column::text as key_two
+    , two.start_at_utc as two_start_at_utc
+    , two.end_at_utc as two_end_at_utc
+
+  from renamed as one 
+  inner join renamed as two
+    on one.within_column = two.within_column
+    and one.unique_id < two.unique_id
+    {% if fan_numbers %} and one.interval_date = two.interval_date {% endif %}
+    {% if allow_touching_edges %}
+      and one.start_at_utc < two.end_at_utc
+      and one.end_at_utc > two.start_at_utc
+    {% else %}
+      and one.start_at_utc <= two.end_at_utc
+      and one.end_at_utc >= two.start_at_utc
+    {% endif %}
+
+    union all 
+
+  -- intervals must have a positive non-zero duration
+  select 
+      case 
+        when start_at_utc = end_at_utc
+        then 'zero duration'
+        when start_at_utc > end_at_utc
+        then 'negative duration'
+      end as error_type
+    , within_column::text as key_one
+    , start_at_utc as one_start_at_utc
+    , end_at_utc as one_end_at_utc
+    , null as key_two
+    , null as two_start_at_utc
+    , null as two_end_at_utc
+
+  from renamed
+  where start_at_utc >= end_at_utc
+
+{% endtest %}
