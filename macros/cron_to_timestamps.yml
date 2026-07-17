@@ -2,18 +2,48 @@ version: 2
 
 macros:
   - name: cron_to_timestamps
-    description: >
-      A macro to generate timestamps from a table of cron expressions. 
+    description: Generate distinct cron and UTC trigger timestamp pairs in a bounded date range.
     arguments:
       - name: cte_name
         type: string
-        description: The name of a CTE containing unique cron expressions.
+        description: Name of the preceding CTE containing cron expressions.
       - name: cron_column_name
         type: string
-        description: The name of the column containing cron experssions within the CTE.
+        description: Name of the cron expression column in the CTE.
       - name: start_date
         type: string
-        description: A string that will produce a SQL syntax DATE(<start_date>) as the starting date for matching timestamps 
+        description: ISO date string or SQL expression for the inclusive range start.
       - name: days_forward
         type: integer
-        description: The number of days from ward from the start date on which to generate matching timestamps.
+        description: Number of days in the half-open generation range.
+      - name: day_match_mode
+        type: string
+        description: One of vixie, contains, union, or intersect.
+
+  - name: cron_start_end_to_timestamps
+    description: Generate cron timestamps within each source row's half-open start/end interval.
+    arguments:
+      - name: cte_name
+        type: string
+        description: Name of the preceding CTE containing cron expressions and bounds.
+      - name: cron_column_name
+        type: string
+        description: Name of the cron expression column.
+      - name: start_at_column_name
+        type: string
+        description: Name of the inclusive interval-start column.
+      - name: end_at_column_name
+        type: string
+        description: Name of the exclusive interval-end column.
+      - name: unique_id
+        type: string
+        description: Name of the source row's unique identifier column.
+      - name: max_date_range
+        type: integer
+        description: Maximum supported interval length in days.
+      - name: day_match_mode
+        type: string
+        description: One of vixie, contains, union, or intersect.
+      - name: input_timezone
+        type: string
+        description: IANA timezone for interpreting timezone-naive bounds; defaults to UTC.

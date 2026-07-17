@@ -1,53 +1,136 @@
-### dbt Cron to Timestamps package.
+# dbt Cron to Timestamps
 
-[Cron](https://en.wikipedia.org/wiki/Cron) expressions are a syntax for pattern-matching timestamps.
+Generate matching timestamps from five-field cron expressions in pure Snowflake SQL.
 
-This macro fans out a table of one-or-more cron expression by their matching timestamps within a range of dates.
+The macros are constructive: they expand the values selected by each cron field and combine only those candidates. They do not generate every minute in the requested date range and filter it afterward.
 
-## Usage 
+## Supported dialect
 
-This macro is used as the sole entry in a CTE. It interacts with a preceding CTE containing cron expressions in one column.
-In this example, `some_cron_cte` and `cron_code` are the name of the CTE, and it's cron expression column.
-The macro will contain a reference to `some_cron_cte.cron_code` in its compiled SQL.
+The package targets the Vixie/ISC cron behavior documented by [Crontab Guru](https://crontab.guru/), using the [Open Cron Pattern Specification 1.0](https://github.com/open-source-cron/ocps/blob/main/specifications/OCPS-1.0.md) as a reference for the core five-field grammar:
 
-The macro also takes a date-like string for the start date (such that `date(<start_date_string>)` works) and a number of days forward.
-These two parameters form a timeframe within which to generate matching timestamps.
+- five fields: minute, hour, day of month, month, day of week;
+- wildcards, lists, ranges, and steps (`*`, `,`, `-`, `/`);
+- case-insensitive three-letter month and weekday names;
+- either `0` or `7` for Sunday, including their use in ranges and steps;
+- a compatibility extension for open-ended steps such as `5/10` (from `5` through the field maximum);
+- one or more spaces or tabs between fields; and
+- the historical Vixie rule for combining day of month and day of week.
 
-## Example Usage
-  ```
-  with some_cron_cte as (
-    select 
-      id
-      , cron_code
-      , other_column 
-    from {{ ref('some_other_model') }}
-  )
+Seconds, year fields, aliases such as `@daily`, and the Quartz-style `L`, `W`, `#`, and `?` modifiers are not supported.
 
-  -- Grain: cron | timestamp 
-  , cron_timestamps as (
-    -- invoking the macro
-    {{ cron_to_timestamps('some_cron_cte', 'cron_code', 'current_date', 60) }}
-  )
+The macros evaluate valid schedules; they are not cron validators. Malformed or out-of-range expressions can raise a Snowflake conversion error or return no matches.
 
-  select 
-    some_cron_cte.cron_code
-    , cron_timestamps.trigger_at_utc
-  
-  from some_cron_cte
-  inner join cron_timestamps 
-    on some_cron_cte.cron_code = cron_timestamps.cron
+### Day matching
 
-  where cron_timestamps.trigger_at_utc > current_timestamp
-  ```
+The default `day_match_mode='vixie'` reproduces the daemon behavior precisely:
 
-## Additional Considerations
+- if either day field starts with `*`, day of month and day of week are intersected (`AND`);
+- otherwise, the two fields are unioned (`OR`).
 
-Cron, like SQL, comes in many flavors. The most finnicky part of this macro is the "day matching mode".
-The time-parts `day-of-month` and `day-of-week` overlap in their consideration of days. Various implementations of cron treat these two 
-sets of matches differently. The classic implementation, covered in crontab.guru](https://crontab.guru/), will `intersect` the matched days 
-from each part if one or both contain a `*`, and only if the `*` is in the first position. See the [cron bug](https://crontab.guru/cron-bug.html) article
-for deeper reference. If neither day part starts with `*`, the results are combined as a `union`, meaning that a matched day need only match one of the day part expressions.
+The first-character check is intentional. It preserves the long-standing behavior described in [Crontab Guru's cron bug article](https://crontab.guru/cron-bug.html).
 
-The first CTE of the macro determines the "day match mode", and an optional parameter `day_match_mode` can be set to `vixie` (default), 
-`contains` (to check for `*` beyond the first position), or `intersect` or `union` to force a parcticular strategy across all expressions.
+Other modes are available when consuming a different dialect:
 
+- `contains`: intersect if `*` appears anywhere in either day field;
+- `intersect`: always use `AND`; or
+- `union`: always use `OR`.
+
+## Installation
+
+Add the package to `packages.yml`:
+
+```yaml
+packages:
+  - git: https://github.com/jaysobel/dbt-cron-timestamps.git
+    revision: main
+```
+
+Then run `dbt deps`.
+
+## Generate timestamps for a date range
+
+`cron_to_timestamps` reads cron expressions from a preceding CTE. It returns distinct `cron, trigger_at_utc` pairs in the half-open range `[start_date, start_date + days_forward)`.
+
+```sql
+with crons as (
+  select cron_code as cron
+  from {{ ref('schedules') }}
+)
+
+, cron_timestamps as (
+  {{ dbt_cron_timestamps.cron_to_timestamps(
+      'crons',
+      'cron',
+      'current_date',
+      days_forward=60,
+      day_match_mode='vixie'
+  ) }}
+)
+
+select *
+from cron_timestamps
+```
+
+For a literal date, pass the ISO string directly (`'2024-01-01'` as the Jinja argument). SQL date expressions such as `dateadd('day', -10, current_date)` are also accepted.
+
+## Generate timestamps for row-level intervals
+
+`cron_start_end_to_timestamps` applies a separate half-open `[start_at, end_at)` range to each source row and returns the source identifier with every match.
+
+```sql
+with schedule_versions as (
+  select schedule_id, cron, start_at, end_at
+  from {{ ref('schedule_versions') }}
+)
+
+, cron_timestamps as (
+  {{ dbt_cron_timestamps.cron_start_end_to_timestamps(
+      'schedule_versions',
+      'cron',
+      'start_at',
+      'end_at',
+      unique_id='schedule_id',
+      max_date_range=1095,
+      day_match_mode='vixie',
+      input_timezone='UTC'
+  ) }}
+)
+
+select *
+from cron_timestamps
+```
+
+`input_timezone` is the IANA timezone used to interpret timezone-naive bounds before converting them to UTC. It defaults to `UTC`. `max_date_range` is a safety limit for the number of days fanned out per interval.
+
+## Correctness testing
+
+The committed exact-match fixture covers 128 curated and deterministically randomized expressions over leap year 2024, totaling 67,165 expected timestamps. A second 1,000-expression stress fixture compares per-expression counts and ordered timestamp fingerprints. Fixture expectations must agree between:
+
+1. a small independent reference evaluator;
+2. `cronsim`, which targets Debian cron behavior; and
+3. `croniter` with `implement_cron_bug=True`.
+
+There is one explicit dialect divergence: `1/2` in the day-of-week field. Cronie rejects this non-standard open-ended-step syntax. Of the libraries that accept it, `cronsim` and this package expand over the literal `0-7` range to `1,3,5,7` (including Sunday), while `croniter` stops at `5`. The choice is pinned by a named fixture rather than treated as portable cron behavior.
+
+Generate and cross-check fixtures:
+
+```shell
+uv run python integration_tests/generate_fixtures.py
+```
+
+Run the Snowflake suite:
+
+```shell
+dbt deps --project-dir integration_tests --profile <your_snowflake_profile>
+dbt seed --project-dir integration_tests --profile <your_snowflake_profile> --full-refresh
+dbt test --project-dir integration_tests --profile <your_snowflake_profile>
+```
+
+The Snowflake tests compare exact timestamp sets and also exercise:
+
+- Sunday `0`/`7` aliases in ranges and steps;
+- Vixie and `contains` day modes;
+- spaces and tabs between fields;
+- leap day and month-name parsing;
+- row-level start/end boundaries and timezone handling; and
+- non-default Snowflake `WEEK_START` values.

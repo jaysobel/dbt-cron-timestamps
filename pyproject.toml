@@ -1,17 +1,16 @@
-[tool.poetry]
+[project]
 name = "dbt-cron-timestamps"
-version = "0.1.0"
-description = ""
-authors = ["Jay Sobel <22080862+73805@users.noreply.github.com>"]
+version = "1.1.0"
+description = "Development tooling for the dbt Cron to Timestamps package"
+requires-python = ">=3.10"
+dependencies = []
 
-[tool.poetry.dependencies]
-python = "^3.8"
-pip = "^22.1.2"
-setuptools = "^62.3.2"
-dbt-snowflake = "^1.1.0"
+[dependency-groups]
+dev = [
+  "croniter==6.2.4",
+  "cronsim==2.7",
+  "dbt-snowflake>=1.10,<1.11",
+]
 
-[tool.poetry.dev-dependencies]
-
-[build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+[tool.uv]
+package = false

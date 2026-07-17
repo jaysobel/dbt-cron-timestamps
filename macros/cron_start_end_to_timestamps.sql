@@ -3,14 +3,19 @@
      , cron_column_name
      , start_at_column_name
      , end_at_column_name
-     , unique_id=none
-     , max_date_range='1095'
+     , unique_id
+     , max_date_range=1095
      , day_match_mode='vixie'
+     , input_timezone='UTC'
    ) 
 %}
 
+{% if day_match_mode not in ('vixie', 'contains', 'union', 'intersect') %}
+  {{ exceptions.raise_compiler_error("day_match_mode must be one of: vixie, contains, union, intersect") }}
+{% endif %}
+
 {#-
-  Macro to convert a row containiner a cron expressions to rows of matching timestamps 
+  Macro to convert rows containing cron expressions to rows of matching timestamps
   within the bounds of a start_at and end_at column.
   takes reference to a CTE with the columns: cron, start_at, end_at and a unique_id
   used to map the output matched timestamps back to their source rows. Start and end can be dates or
@@ -33,8 +38,10 @@
     of cron, this is based on the presence of an * in the first position of each entry (vixie). Others expand this first entry
     to any position of the entry (contains). See [this write up](https://crontab.guru/cron-bug.html) for details.
     Other implementations use exclusively intersect or union, which can be coded here.
+  :param input_timezone: IANA timezone name used to interpret timezone-naive start/end values. Default is `UTC`.
+    Generated intervals are half-open: start_at is inclusive and end_at is exclusive.
 
-  :return: A SQL select statement of ~300 lines that culminates in a distinct selection of: `cron, cron_date_range_sk, trigger_at_utc`.
+  :return: A SQL select statement that returns the passed unique identifier, `cron`, and `trigger_at_utc`.
 
   ## Example call ##:
   ```
@@ -58,8 +65,8 @@
     select
       coalesce(nullif({{ unique_id }}::text, ''), {{ cron_column_name }}) as unique_id_{{ unique_id }}
       , {{ cron_column_name }} as cron
-      , to_timestamp_ntz(convert_timezone('UTC', {{ start_at_column_name }})) as start_at_utc
-      , to_timestamp_ntz(convert_timezone('UTC', {{ end_at_column_name }})) as end_at_utc
+      , convert_timezone('{{ input_timezone }}', 'UTC', to_timestamp_ntz({{ start_at_column_name }})) as start_at_utc
+      , convert_timezone('{{ input_timezone }}', 'UTC', to_timestamp_ntz({{ end_at_column_name }})) as end_at_utc
     from {{ cte_name }}
     where {{ start_at_column_name }} < {{ end_at_column_name }}
   )
@@ -77,8 +84,8 @@
       {% if day_match_mode == 'vixie' -%}
       
       , case
-          when not left(split_part(cron, ' ', 3), 1) = '*'
-          and not left(split_part(cron, ' ', 5), 1) = '*'
+          when not left(strtok(cron, concat(' ', char(9)), 3), 1) = '*'
+          and not left(strtok(cron, concat(' ', char(9)), 5), 1) = '*'
           then 'union'
           else 'intersect'
         end as day_match_mode
@@ -86,8 +93,8 @@
       {%- elif day_match_mode == 'contains' -%}
 
       , case
-          when not left(split_part(cron, ' ', 3), 1) like '%*%'
-          and not left(split_part(cron, ' ', 5), 1) like '%*%'
+          when strtok(cron, concat(' ', char(9)), 3) not like '%*%'
+          and strtok(cron, concat(' ', char(9)), 5) not like '%*%'
           then 'union'
           else 'intersect'
         end as day_match_mode
@@ -103,7 +110,7 @@
 
   , numbers as (
     select row_number() over (order by 1) - 1 as num
-    from table (generator(rowcount => to_number({{max_date_range}} + 1) )) -- the maximum generated days from start toward end
+    from table (generator(rowcount => greatest(60, to_number({{max_date_range}} + 1)) )) -- date range plus complete cron value domains
   )
 
   -- Fan by ranges by dates, and distinct across cron, start/end, date.
@@ -173,11 +180,12 @@
     
       union all
     
-    select distinct
+    select
       'day_of_week' as part
-      , dayofweek(date) as value
+      , num as value
       , value::text as value_text
-    from cron_dates
+    from numbers
+    where num between 0 and 7
   )
 
   -- Set full ranges to replace wildcards "*"
@@ -196,7 +204,7 @@
           when 2 then '0-23'
           when 3 then '1-31'
           when 4 then '1-12'
-          when 5 then '0-6'
+          when 5 then '0-7'
         end star_range
     from numbers
     where num between 1 and 5 
@@ -215,14 +223,13 @@
           when 5 then 'day_of_week'
         end as part
         -- replace asterisk with equivalent full-range selector (per cron part)
-      , replace(split_part(crons.cron, ' ', space_number.num), '*', part_defaults.star_range) as part_entry_raw
+      , replace(strtok(crons.cron, concat(' ', char(9)), space_number.num), '*', part_defaults.star_range) as part_entry_raw
       , case 
           when space_number.num = 5
           then 
-            replace(replace(replace(replace(
-              replace(replace(replace(replace(
-                upper(part_entry_raw), '7', '0'), 'SUN', '0'), 'MON', '1'), 'TUE', '2')
-              , 'WED', '3'), 'THU', '4'), 'FRI', '5'), 'SAT', '6')
+            replace(replace(replace(replace(replace(replace(replace(
+              upper(part_entry_raw), 'SUN', '0'), 'MON', '1'), 'TUE', '2'), 'WED', '3')
+              , 'THU', '4'), 'FRI', '5'), 'SAT', '6')
           when space_number.num = 4
           then 
             replace(replace(replace(replace(replace(replace(
@@ -252,7 +259,7 @@
     inner join part_defaults
       on space_number.num = part_defaults.part_number
     inner join numbers as comma_numbers
-      on regexp_count(split_part(crons.cron, ' ', space_number.num), ',') >= comma_numbers.num
+      on regexp_count(strtok(crons.cron, concat(' ', char(9)), space_number.num), ',') >= comma_numbers.num
       and comma_numbers.num between 0 and 10 -- maximum comma-separated subentries to split within a part
   )
 
@@ -272,8 +279,8 @@
     select distinct
       part_subentries.part
       , part_subentries.part_subentry_sk
-      , part_values.value
-      , part_values.value_text
+      , iff(part_subentries.part = 'day_of_week', mod(part_values.value, 7), part_values.value) as value
+      , iff(part_subentries.part = 'day_of_week', mod(part_values.value, 7)::text, part_values.value_text) as value_text
     from part_subentries
     inner join part_values
       on part_subentries.part = part_values.part
@@ -321,7 +328,7 @@
       and cron_part_day_of_month.part = 'day_of_month'
     left join cron_part_matched_values as cron_part_day_of_week
       on cron_dates.cron = cron_part_day_of_week.cron
-      and dayofweek(cron_dates.date) = cron_part_day_of_week.value
+      and mod(dayofweekiso(cron_dates.date), 7) = cron_part_day_of_week.value
       and cron_part_day_of_week.part = 'day_of_week'
     
     inner join cron_part_matched_values as cron_part_hour
@@ -356,7 +363,8 @@
     on cron_times_matched.cron = cron_ranges.cron
     and cron_range_dates.start_date = cron_ranges.start_date
     and cron_range_dates.end_date = cron_ranges.end_date
-    and cron_times_matched.trigger_at_utc between cron_ranges.start_at_utc and cron_ranges.end_at_utc
+    and cron_times_matched.trigger_at_utc >= cron_ranges.start_at_utc
+    and cron_times_matched.trigger_at_utc < cron_ranges.end_at_utc
   inner join id_cron_rows
     on cron_ranges.cron = id_cron_rows.cron
     and cron_ranges.start_at_utc = id_cron_rows.start_at_utc
