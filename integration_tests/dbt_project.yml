@@ -4,6 +4,9 @@ config-version: 2
 
 profile: dbt_cron_timestamps_integration
 
+on-run-start:
+  - "alter session set WEEK_START = 4"
+
 model-paths: ["models"]
 seed-paths: ["seeds"]
 test-paths: ["tests"]

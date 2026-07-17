@@ -1,5 +1,3 @@
-{{ config(pre_hook="alter session set WEEK_START = 6") }}
-
 with range_cases as (
   select
     column1::int as case_id

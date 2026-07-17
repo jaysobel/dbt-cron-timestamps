@@ -5,4 +5,5 @@ logs/
 target/
 integration_tests/dbt_packages/
 integration_tests/logs/
+integration_tests/package-lock.yml
 integration_tests/target/

@@ -1,10 +1,15 @@
 # dbt Cron to Timestamps
 
+[![CI](https://github.com/jaysobel/dbt-cron-timestamps/actions/workflows/ci.yml/badge.svg)](https://github.com/jaysobel/dbt-cron-timestamps/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Generate matching timestamps from five-field cron expressions in pure Snowflake SQL.
 
 The macros are constructive: they expand the values selected by each cron field and combine only those candidates. They do not generate every minute in the requested date range and filter it afterward.
 
 ## Supported dialect
+
+This package supports Snowflake. Its implementation intentionally uses Snowflake-native SQL to construct candidate timestamps efficiently rather than scanning every minute in the requested range.
 
 The package targets the Vixie/ISC cron behavior documented by [Crontab Guru](https://crontab.guru/), using the [Open Cron Pattern Specification 1.0](https://github.com/open-source-cron/ocps/blob/main/specifications/OCPS-1.0.md) as a reference for the core five-field grammar:
 
@@ -42,10 +47,21 @@ Add the package to `packages.yml`:
 ```yaml
 packages:
   - git: https://github.com/jaysobel/dbt-cron-timestamps.git
-    revision: main
+    revision: 1.1.0
 ```
 
 Then run `dbt deps`.
+
+The `main` branch contains unreleased development. Pin a release tag so package installation remains reproducible.
+
+## Public API
+
+The package exposes two public macros:
+
+- `dbt_cron_timestamps.cron_to_timestamps`
+- `dbt_cron_timestamps.cron_start_end_to_timestamps`
+
+Other implementation details are not considered part of the stable API.
 
 ## Generate timestamps for a date range
 
@@ -126,6 +142,8 @@ dbt seed --project-dir integration_tests --profile <your_snowflake_profile> --fu
 dbt test --project-dir integration_tests --profile <your_snowflake_profile>
 ```
 
+The integration project installs the repository root as a local package. CI regenerates the independent fixtures and parses the integration project across supported dbt runtimes; maintainers run the Snowflake execution suite before a release.
+
 The Snowflake tests compare exact timestamp sets and also exercise:
 
 - Sunday `0`/`7` aliases in ranges and steps;
@@ -134,3 +152,7 @@ The Snowflake tests compare exact timestamp sets and also exercise:
 - leap day and month-name parsing;
 - row-level start/end boundaries and timezone handling; and
 - non-default Snowflake `WEEK_START` values.
+
+## Development
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the local workflow and release checks. Release history is recorded in [CHANGELOG.md](CHANGELOG.md).
