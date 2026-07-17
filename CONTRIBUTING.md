@@ -14,8 +14,13 @@ Regenerate the reference fixtures and verify agreement across the independent im
 
 ```shell
 uv run python integration_tests/generate_fixtures.py
-git diff --exit-code -- integration_tests/seeds
+test "$(wc -l < integration_tests/seeds/cron_expected.csv)" -eq 67166
+git diff --exit-code -- \
+  integration_tests/seeds/cron_cases.csv \
+  integration_tests/seeds/cron_stress.csv
 ```
+
+`cron_expected.csv` is generated locally and ignored by Git. Run the fixture generator before seeding the integration project.
 
 Parse the downstream integration project:
 

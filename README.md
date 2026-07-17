@@ -47,7 +47,7 @@ Add the package to `packages.yml`:
 ```yaml
 packages:
   - git: https://github.com/jaysobel/dbt-cron-timestamps.git
-    revision: 1.1.0
+    revision: 1.1.1
 ```
 
 Then run `dbt deps`.
@@ -120,7 +120,7 @@ from cron_timestamps
 
 ## Correctness testing
 
-The committed exact-match fixture covers 128 curated and deterministically randomized expressions over leap year 2024, totaling 67,165 expected timestamps. A second 1,000-expression stress fixture compares per-expression counts and ordered timestamp fingerprints. Fixture expectations must agree between:
+The generated exact-match fixture covers 128 curated and deterministically randomized expressions over leap year 2024, totaling 67,165 expected timestamps. A committed 1,000-expression stress fixture compares per-expression counts and ordered timestamp fingerprints. Fixture expectations must agree between:
 
 1. a small independent reference evaluator;
 2. `cronsim`, which targets Debian cron behavior; and
@@ -133,6 +133,8 @@ Generate and cross-check fixtures:
 ```shell
 uv run python integration_tests/generate_fixtures.py
 ```
+
+The 67,165-row exact-match CSV is generated locally and ignored by Git. This keeps the installable package small without weakening the reproducible comparison against established cron libraries.
 
 Run the Snowflake suite:
 
