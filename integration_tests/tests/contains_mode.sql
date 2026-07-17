@@ -1,5 +1,3 @@
-{{ config(pre_hook="alter session set WEEK_START = 4") }}
-
 with crons as (
   select '0 0 1,*/10 * MON' as cron
 )
