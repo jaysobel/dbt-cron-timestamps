@@ -20,7 +20,10 @@ jobs:
       - name: Verify cross-implementation fixtures
         run: |
           uv run python integration_tests/generate_fixtures.py
-          git diff --exit-code -- integration_tests/seeds
+          test "$(wc -l < integration_tests/seeds/cron_expected.csv)" -eq 67166
+          git diff --exit-code -- \
+            integration_tests/seeds/cron_cases.csv \
+            integration_tests/seeds/cron_stress.csv
 
   dbt-core:
     name: dbt Core ${{ matrix.dbt-version }}

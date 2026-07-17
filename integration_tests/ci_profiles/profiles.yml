@@ -5,7 +5,7 @@ dbt_cron_timestamps_integration:
       type: snowflake
       account: example
       user: example
-      password: example
+      authenticator: externalbrowser
       database: example
       schema: example
       warehouse: example
