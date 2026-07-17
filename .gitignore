@@ -1,4 +1,8 @@
-
-target/
+.venv/
+.user.yml
 dbt_packages/
 logs/
+target/
+integration_tests/dbt_packages/
+integration_tests/logs/
+integration_tests/target/

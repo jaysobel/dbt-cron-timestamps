@@ -1,0 +1,32 @@
+name: dbt_cron_timestamps_integration
+version: 1.0.0
+config-version: 2
+
+profile: dbt_cron_timestamps_integration
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+
+models:
+  dbt_cron_timestamps_integration:
+    +schema: dbt_cron_timestamps_test
+
+seeds:
+  dbt_cron_timestamps_integration:
+    +schema: dbt_cron_timestamps_test
+    cron_cases:
+      +column_types:
+        cron: varchar(255)
+    cron_expected:
+      +column_types:
+        cron: varchar(255)
+        trigger_at_utc: timestamp_ntz
+    cron_stress:
+      +column_types:
+        cron: varchar(255)
+        expected_count: integer
+        expected_md5: varchar(32)
+
+clean-targets: ["target", "dbt_packages", "logs"]

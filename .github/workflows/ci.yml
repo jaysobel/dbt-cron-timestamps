@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Verify cross-implementation fixtures
+        run: |
+          uv run python integration_tests/generate_fixtures.py
+          git diff --exit-code -- integration_tests/seeds
+      - name: Parse the integration project
+        run: |
+          uv run dbt deps --project-dir integration_tests --profiles-dir integration_tests/ci_profiles
+          uv run dbt parse --project-dir integration_tests --profiles-dir integration_tests/ci_profiles

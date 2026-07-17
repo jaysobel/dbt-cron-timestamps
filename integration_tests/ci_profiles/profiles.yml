@@ -1,0 +1,12 @@
+dbt_cron_timestamps_integration:
+  target: ci
+  outputs:
+    ci:
+      type: snowflake
+      account: example
+      user: example
+      password: example
+      database: example
+      schema: example
+      warehouse: example
+      threads: 1
